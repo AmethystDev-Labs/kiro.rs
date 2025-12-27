@@ -110,9 +110,6 @@ pub async fn post_messages(
                 ConversionError::EmptyMessages => {
                     ("invalid_request_error", "消息列表为空".to_string())
                 }
-                ConversionError::ContentParseFailed(msg) => {
-                    ("invalid_request_error", format!("内容解析失败: {}", msg))
-                }
             };
             tracing::warn!("请求转换失败: {}", e);
             return (
@@ -213,7 +210,7 @@ async fn handle_stream_request(
 /// 创建 SSE 事件流
 fn create_sse_stream(
     response: reqwest::Response,
-    mut ctx: StreamContext,
+    ctx: StreamContext,
     initial_events: Vec<SseEvent>,
 ) -> impl Stream<Item = Result<Bytes, Infallible>> {
     // 先发送初始事件

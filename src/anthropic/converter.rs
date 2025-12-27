@@ -45,8 +45,7 @@ pub struct ConversionResult {
 #[derive(Debug)]
 pub enum ConversionError {
     UnsupportedModel(String),
-    EmptyMessages,
-    ContentParseFailed(String),
+    EmptyMessages
 }
 
 impl std::fmt::Display for ConversionError {
@@ -54,7 +53,6 @@ impl std::fmt::Display for ConversionError {
         match self {
             ConversionError::UnsupportedModel(model) => write!(f, "模型不支持: {}", model),
             ConversionError::EmptyMessages => write!(f, "消息列表为空"),
-            ConversionError::ContentParseFailed(msg) => write!(f, "内容解析失败: {}", msg),
         }
     }
 }
