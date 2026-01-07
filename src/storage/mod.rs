@@ -236,16 +236,16 @@ impl CredentialStore for PgCredentialStore {
                 sqlx::query(
                     "INSERT INTO kiro_credentials (\
                      id, access_token, refresh_token, profile_arn, expires_at, auth_method, \
-                     client_id, client_secret, priority\
-                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\
-                     ON CONFLICT (id) DO UPDATE SET\
-                     access_token = EXCLUDED.access_token,\
-                     refresh_token = EXCLUDED.refresh_token,\
-                     profile_arn = EXCLUDED.profile_arn,\
-                     expires_at = EXCLUDED.expires_at,\
-                     auth_method = EXCLUDED.auth_method,\
-                     client_id = EXCLUDED.client_id,\
-                     client_secret = EXCLUDED.client_secret,\
+                     client_id, client_secret, priority \
+                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
+                     ON CONFLICT (id) DO UPDATE SET \
+                     access_token = EXCLUDED.access_token, \
+                     refresh_token = EXCLUDED.refresh_token, \
+                     profile_arn = EXCLUDED.profile_arn, \
+                     expires_at = EXCLUDED.expires_at, \
+                     auth_method = EXCLUDED.auth_method, \
+                     client_id = EXCLUDED.client_id, \
+                     client_secret = EXCLUDED.client_secret, \
                      priority = EXCLUDED.priority",
                 )
                 .bind(id)
