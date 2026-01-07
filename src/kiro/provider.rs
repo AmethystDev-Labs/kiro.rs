@@ -289,9 +289,16 @@ mod tests {
     use super::*;
     use crate::kiro::token_manager::CallContext;
     use crate::model::config::Config;
+    use crate::storage::{CredentialStore, MemoryCredentialStore};
+    use std::sync::Arc;
+
+    fn memory_store(credentials: Vec<KiroCredentials>) -> Arc<dyn CredentialStore> {
+        Arc::new(MemoryCredentialStore::new(credentials))
+    }
 
     fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
-        let tm = MultiTokenManager::new(config, vec![credentials], None, None, false).unwrap();
+        let store = memory_store(vec![credentials.clone()]);
+        let tm = MultiTokenManager::new(config, vec![credentials], None, store).unwrap();
         KiroProvider::new(Arc::new(tm))
     }
 

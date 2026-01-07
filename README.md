@@ -323,6 +323,11 @@ kiro-rs/
 RUST_LOG=debug ./target/release/kiro-rs
 ```
 
+可通过环境变量配置凭据存储：
+
+- `KIRO_STORAGE_MODE=local|pgsql`（默认 `local`）
+- `KIRO_PG_URL=postgres://...` 或 `DATABASE_URL`（当使用 `pgsql`）
+
 ## 注意事项
 
 1. **凭证安全**: 请妥善保管 `credentials.json` 文件，不要提交到版本控制
