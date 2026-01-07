@@ -7,12 +7,38 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use std::borrow::Cow;
+
+#[cfg(feature = "embed-admin-ui")]
 use rust_embed::Embed;
 
+#[cfg(feature = "embed-admin-ui")]
 /// 嵌入前端构建产物
 #[derive(Embed)]
 #[folder = "admin-ui/dist"]
 struct Asset;
+
+struct AssetData {
+    data: Cow<'static, [u8]>,
+}
+
+#[cfg(feature = "embed-admin-ui")]
+fn get_asset(path: &str) -> Option<AssetData> {
+    Asset::get(path).map(|content| AssetData { data: content.data })
+}
+
+#[cfg(not(feature = "embed-admin-ui"))]
+fn get_asset(_path: &str) -> Option<AssetData> {
+    None
+}
+
+#[cfg(feature = "embed-admin-ui")]
+const MISSING_UI_MESSAGE: &str =
+    "Admin UI not built. Run 'pnpm build' in admin-ui and rebuild the service.";
+
+#[cfg(not(feature = "embed-admin-ui"))]
+const MISSING_UI_MESSAGE: &str =
+    "Admin UI not embedded. Run 'pnpm build' in admin-ui and compile with --features embed-admin-ui.";
 
 /// 创建 Admin UI 路由
 pub fn create_admin_ui_router() -> Router {
@@ -39,7 +65,7 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
     }
 
     // 尝试获取请求的文件
-    if let Some(content) = Asset::get(path) {
+    if let Some(content) = get_asset(path) {
         let mime = mime_guess::from_path(path)
             .first_or_octet_stream()
             .to_string();
@@ -69,7 +95,7 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
 
 /// 提供 index.html
 fn serve_index() -> Response<Body> {
-    match Asset::get("index.html") {
+    match get_asset("index.html") {
         Some(content) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
@@ -78,9 +104,7 @@ fn serve_index() -> Response<Body> {
             .expect("Failed to build response"),
         None => Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from(
-                "Admin UI not built. Run 'pnpm build' in admin-ui directory.",
-            ))
+            .body(Body::from(MISSING_UI_MESSAGE))
             .expect("Failed to build response"),
     }
 }

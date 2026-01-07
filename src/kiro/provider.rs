@@ -11,7 +11,6 @@ use uuid::Uuid;
 
 use crate::http_client::{ProxyConfig, build_client};
 use crate::kiro::machine_id;
-use crate::kiro::model::credentials::KiroCredentials;
 use crate::kiro::token_manager::{CallContext, MultiTokenManager};
 
 /// 每个凭据的最大重试次数

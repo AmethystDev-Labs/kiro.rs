@@ -218,19 +218,21 @@ impl CredentialStore for PgCredentialStore {
     fn persist(&self, credentials: &[KiroCredentials]) -> anyhow::Result<()> {
         self.ensure_schema()?;
 
+        let mut prepared = Vec::with_capacity(credentials.len());
         for cred in credentials {
-            if cred.id.is_none() {
-                bail!("Credential id is required for PostgreSQL persistence");
-            }
+            let id = cred
+                .id
+                .context("Credential id is required for PostgreSQL persistence")?;
+            let id = i64::try_from(id)
+                .context("Credential id out of range for PostgreSQL persistence")?;
+            let priority = i32::try_from(cred.priority).unwrap_or(i32::MAX);
+            prepared.push((cred, id, priority));
         }
 
         self.block_on(async {
             let mut tx = self.pool.begin().await?;
 
-            for cred in credentials {
-                let id = i64::try_from(cred.id.unwrap())?;
-                let priority = i32::try_from(cred.priority).unwrap_or(i32::MAX);
-
+            for (cred, id, priority) in prepared {
                 sqlx::query(
                     "INSERT INTO kiro_credentials (\
                      id, access_token, refresh_token, profile_arn, expires_at, auth_method, \
