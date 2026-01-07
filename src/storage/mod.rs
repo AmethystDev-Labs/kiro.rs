@@ -185,8 +185,8 @@ impl CredentialStore for PgCredentialStore {
         let rows = self.block_on(async {
             sqlx::query(
                 "SELECT id, access_token, refresh_token, profile_arn, expires_at, auth_method, \
-                 client_id, client_secret, priority\
-                 FROM kiro_credentials\
+                 client_id, client_secret, priority \
+                 FROM kiro_credentials \
                  ORDER BY priority ASC, id ASC",
             )
             .fetch_all(&self.pool)
