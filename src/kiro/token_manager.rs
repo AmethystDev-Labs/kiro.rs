@@ -505,9 +505,10 @@ impl MultiTokenManager {
             .map(|e| e.id)
             .unwrap_or(0);
 
+        let auto_disable_on_failure = config.auto_disable_on_failure;
         let manager = Self {
             config,
-            auto_disable_on_failure: AtomicBool::new(config.auto_disable_on_failure),
+            auto_disable_on_failure: AtomicBool::new(auto_disable_on_failure),
             proxy,
             entries: Mutex::new(entries),
             current_id: Mutex::new(initial_id),
@@ -530,6 +531,16 @@ impl MultiTokenManager {
     /// 获取配置的引用
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// 获取自动禁用配置
+    pub fn auto_disable_on_failure(&self) -> bool {
+        self.auto_disable_on_failure.load(Ordering::Relaxed)
+    }
+
+    /// 设置自动禁用配置
+    pub fn set_auto_disable_on_failure(&self, enabled: bool) {
+        self.auto_disable_on_failure.store(enabled, Ordering::Relaxed);
     }
 
     /// 获取当前活动凭据的克隆
