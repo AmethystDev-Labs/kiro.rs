@@ -35,6 +35,16 @@ export interface SuccessResponse {
   message: string
 }
 
+// 管理设置响应
+export interface SettingsResponse {
+  autoDisableOnFailure: boolean
+}
+
+// 更新管理设置请求
+export interface UpdateSettingsRequest {
+  autoDisableOnFailure: boolean
+}
+
 // 错误响应
 export interface AdminErrorResponse {
   error: {

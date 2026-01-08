@@ -8,7 +8,7 @@ use crate::kiro::token_manager::MultiTokenManager;
 use super::error::AdminServiceError;
 use super::types::{
     AddCredentialRequest, AddCredentialResponse, BalanceResponse, CredentialStatusItem,
-    CredentialsStatusResponse,
+    CredentialsStatusResponse, SettingsResponse,
 };
 
 /// Admin 服务
@@ -51,6 +51,20 @@ impl AdminService {
             current_id: snapshot.current_id,
             credentials,
         }
+    }
+
+    /// 获取管理设置
+    pub fn get_settings(&self) -> SettingsResponse {
+        SettingsResponse {
+            auto_disable_on_failure: self.token_manager.auto_disable_on_failure(),
+        }
+    }
+
+    /// 更新管理设置
+    pub fn update_settings(&self, auto_disable_on_failure: bool) -> SettingsResponse {
+        self.token_manager
+            .set_auto_disable_on_failure(auto_disable_on_failure);
+        self.get_settings()
     }
 
     /// 设置凭据禁用状态

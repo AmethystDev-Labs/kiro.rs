@@ -40,6 +40,24 @@ pub struct CredentialStatusItem {
     pub has_profile_arn: bool,
 }
 
+// ============ 设置 ============
+
+/// 管理设置响应
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsResponse {
+    /// 连续失败达到阈值时是否自动禁用凭据
+    pub auto_disable_on_failure: bool,
+}
+
+/// 更新管理设置请求
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSettingsRequest {
+    /// 连续失败达到阈值时是否自动禁用凭据
+    pub auto_disable_on_failure: bool,
+}
+
 // ============ 操作请求 ============
 
 /// 启用/禁用凭据请求

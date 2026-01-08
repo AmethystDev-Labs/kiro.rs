@@ -9,7 +9,7 @@ use parking_lot::Mutex;
 use serde::Serialize;
 use tokio::sync::Mutex as TokioMutex;
 
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use crate::http_client::{ProxyConfig, build_client};
 use crate::kiro::machine_id;
 use crate::kiro::model::credentials::KiroCredentials;
@@ -419,6 +419,7 @@ pub struct ManagerSnapshot {
 /// 故障统计基于 API 调用结果，而非 Token 刷新结果
 pub struct MultiTokenManager {
     config: Config,
+    auto_disable_on_failure: AtomicBool,
     proxy: Option<ProxyConfig>,
     /// 凭据条目列表
     entries: Mutex<Vec<CredentialEntry>>,
@@ -506,6 +507,7 @@ impl MultiTokenManager {
 
         let manager = Self {
             config,
+            auto_disable_on_failure: AtomicBool::new(config.auto_disable_on_failure),
             proxy,
             entries: Mutex::new(entries),
             current_id: Mutex::new(initial_id),
@@ -764,7 +766,7 @@ impl MultiTokenManager {
 
     /// 报告指定凭据 API 调用失败
     ///
-    /// 增加失败计数，达到阈值时禁用凭据并切换到优先级最高的可用凭据
+    /// 增加失败计数，达到阈值时（若开启自动禁用）禁用凭据并切换到优先级最高的可用凭据
     /// 返回是否还有可用凭据可以重试
     ///
     /// # Arguments
@@ -789,24 +791,32 @@ impl MultiTokenManager {
         );
 
         if failure_count >= MAX_FAILURES_PER_CREDENTIAL {
-            entry.disabled = true;
-            tracing::error!("凭据 #{} 已连续失败 {} 次，已被禁用", id, failure_count);
+            if self.auto_disable_on_failure.load(Ordering::Relaxed) {
+                entry.disabled = true;
+                tracing::error!("凭据 #{} 已连续失败 {} 次，已被禁用", id, failure_count);
 
-            // 切换到优先级最高的可用凭据
-            if let Some(next) = entries
-                .iter()
-                .filter(|e| !e.disabled)
-                .min_by_key(|e| e.credentials.priority)
-            {
-                *current_id = next.id;
-                tracing::info!(
-                    "已切换到凭据 #{}（优先级 {}）",
-                    next.id,
-                    next.credentials.priority
+                // 切换到优先级最高的可用凭据
+                if let Some(next) = entries
+                    .iter()
+                    .filter(|e| !e.disabled)
+                    .min_by_key(|e| e.credentials.priority)
+                {
+                    *current_id = next.id;
+                    tracing::info!(
+                        "已切换到凭据 #{}（优先级 {}）",
+                        next.id,
+                        next.credentials.priority
+                    );
+                } else {
+                    tracing::error!("所有凭据均已禁用！");
+                    return false;
+                }
+            } else if failure_count == MAX_FAILURES_PER_CREDENTIAL {
+                tracing::warn!(
+                    "凭据 #{} 已连续失败 {} 次，自动禁用已关闭",
+                    id,
+                    failure_count
                 );
-            } else {
-                tracing::error!("所有凭据均已禁用！");
-                return false;
             }
         }
 
@@ -1055,7 +1065,7 @@ impl MultiTokenManager {
 mod tests {
     use super::*;
     use crate::storage::{CredentialStore, MemoryCredentialStore};
-    use std::sync::Arc;
+    use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
     fn memory_store(credentials: Vec<KiroCredentials>) -> Arc<dyn CredentialStore> {
         Arc::new(MemoryCredentialStore::new(credentials))
@@ -1200,6 +1210,33 @@ mod tests {
         assert!(manager.report_failure(2));
         assert!(!manager.report_failure(2)); // 所有凭据都禁用了
         assert_eq!(manager.available_count(), 0);
+    }
+
+    #[test]
+    fn test_multi_token_manager_report_failure_without_auto_disable() {
+        let mut config = Config::default();
+        config.auto_disable_on_failure = false;
+        let mut cred1 = KiroCredentials::default();
+        cred1.refresh_token = Some("token1".to_string());
+        let mut cred2 = KiroCredentials::default();
+        cred2.refresh_token = Some("token2".to_string());
+
+        let store = memory_store(vec![cred1.clone(), cred2.clone()]);
+        let manager = MultiTokenManager::new(config, vec![cred1, cred2], None, store).unwrap();
+
+        assert_eq!(
+            manager.credentials().refresh_token,
+            Some("token1".to_string())
+        );
+
+        assert!(manager.report_failure(1));
+        assert!(manager.report_failure(1));
+        assert!(manager.report_failure(1));
+        assert_eq!(manager.available_count(), 2);
+        assert_eq!(
+            manager.credentials().refresh_token,
+            Some("token1".to_string())
+        );
     }
 
     #[test]
