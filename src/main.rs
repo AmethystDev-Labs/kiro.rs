@@ -5,16 +5,18 @@ mod common;
 mod http_client;
 mod kiro;
 mod model;
+mod storage;
 pub mod token;
 
 use std::sync::Arc;
 
 use clap::Parser;
-use kiro::model::credentials::{CredentialsConfig, KiroCredentials};
+use kiro::model::credentials::KiroCredentials;
 use kiro::provider::KiroProvider;
 use kiro::token_manager::MultiTokenManager;
 use model::arg::Args;
 use model::config::Config;
+use storage::build_credential_store;
 
 #[tokio::main]
 async fn main() {
@@ -38,20 +40,20 @@ async fn main() {
         std::process::exit(1);
     });
 
-    // 加载凭证（支持单对象或数组格式）
+    // 加载凭证（由存储模块决定来源）
     let credentials_path = args
         .credentials
         .unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
-    let credentials_config = CredentialsConfig::load(&credentials_path).unwrap_or_else(|e| {
+    let credential_store = build_credential_store(&credentials_path).unwrap_or_else(|e| {
+        tracing::error!("初始化凭据存储失败: {}", e);
+        std::process::exit(1);
+    });
+    tracing::info!("凭据存储模式: {}", credential_store.mode());
+
+    let credentials_list = credential_store.load().unwrap_or_else(|e| {
         tracing::error!("加载凭证失败: {}", e);
         std::process::exit(1);
     });
-
-    // 判断是否为多凭据格式（用于刷新后回写）
-    let is_multiple_format = credentials_config.is_multiple();
-
-    // 转换为按优先级排序的凭据列表
-    let credentials_list = credentials_config.into_sorted_credentials();
     tracing::info!("已加载 {} 个凭据配置", credentials_list.len());
 
     // 获取第一个凭据用于日志显示
@@ -82,8 +84,7 @@ async fn main() {
         config.clone(),
         credentials_list,
         proxy_config.clone(),
-        Some(credentials_path.into()),
-        is_multiple_format,
+        credential_store.clone(),
     )
     .unwrap_or_else(|e| {
         tracing::error!("创建 Token 管理器失败: {}", e);
@@ -148,6 +149,8 @@ async fn main() {
     if admin_key_valid {
         tracing::info!("Admin API:");
         tracing::info!("  GET  /api/admin/credentials");
+        tracing::info!("  GET  /api/admin/settings");
+        tracing::info!("  POST /api/admin/settings");
         tracing::info!("  POST /api/admin/credentials/:index/disabled");
         tracing::info!("  POST /api/admin/credentials/:index/priority");
         tracing::info!("  POST /api/admin/credentials/:index/reset");

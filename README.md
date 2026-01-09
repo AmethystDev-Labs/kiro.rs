@@ -50,7 +50,8 @@ cargo build --release
    "proxyUrl": "http://127.0.0.1:7890", // 可选, HTTP/SOCK5代理, 不需要请删除
    "proxyUsername": "user",  // 可选, HTTP/SOCK5代理用户名, 不需要请删除
    "proxyPassword": "pass",  // 可选, HTTP/SOCK5代理密码, 不需要请删除
-   "adminApiKey": "sk-admin-your-secret-key"  // 可选, Admin API 密钥, 用于启用凭据管理 API, 不需要请删除
+   "adminApiKey": "sk-admin-your-secret-key",  // 可选, Admin API 密钥, 用于启用凭据管理 API, 不需要请删除
+   "autoDisableOnFailure": true  // 可选, 连续失败达到阈值时是否自动禁用凭据, 默认 true
 }
 ```
 最小启动配置为: 
@@ -174,6 +175,7 @@ curl http://127.0.0.1:8990/v1/messages \
 | `proxyUsername` | string | - | 代理用户名（可选） |
 | `proxyPassword` | string | - | 代理密码（可选） |
 | `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API（可选） |
+| `autoDisableOnFailure` | boolean | `true` | 连续失败达到阈值时是否自动禁用凭据 |
 
 ### credentials.json
 
@@ -194,9 +196,16 @@ curl http://127.0.0.1:8990/v1/messages \
 
 | Anthropic 模型 | Kiro 模型 |
 |----------------|-----------|
-| `*sonnet*` | `claude-sonnet-4.5` |
-| `*opus*` | `claude-opus-4.5` |
-| `*haiku*` | `claude-haiku-4.5` |
+| `claude-sonnet-4-20250514` | `claude-sonnet-4.5` |
+| `claude-3-5-sonnet-20241022` | `claude-sonnet-4.5` |
+| `claude-sonnet-4-5-20250929` | `claude-sonnet-4.5` |
+| `claude-opus-4-20250514` | `claude-opus-4.5` |
+| `claude-opus-4-5-20251101` | `claude-opus-4.5` |
+| `claude-haiku-4-20250514` | `claude-haiku-4.5` |
+| `claude-3-5-haiku-20241022` | `claude-haiku-4.5` |
+| `claude-haiku-4-5-20251001` | `claude-haiku-4.5` |
+
+未匹配的模型会返回 `Not Found Model`。
 
 ## 项目结构
 
@@ -322,6 +331,11 @@ kiro-rs/
 ```bash
 RUST_LOG=debug ./target/release/kiro-rs
 ```
+
+可通过环境变量配置凭据存储：
+
+- `KIRO_STORAGE_MODE=local|pgsql`（默认 `local`）
+- `KIRO_PG_URL=postgres://...` 或 `DATABASE_URL`（当使用 `pgsql`）
 
 ## 注意事项
 

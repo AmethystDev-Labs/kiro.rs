@@ -61,6 +61,15 @@ pub async fn get_models() -> impl IntoResponse {
             model_type: "chat".to_string(),
             max_tokens: 32000,
         },
+        Model {
+            id: "claude-3-5-haiku-20241022".to_string(),
+            object: "model".to_string(),
+            created: 1729555200,
+            owned_by: "anthropic".to_string(),
+            display_name: "Claude Haiku 3.5".to_string(),
+            model_type: "chat".to_string(),
+            max_tokens: 32000,
+        },
     ];
 
     Json(ModelsResponse {
@@ -104,8 +113,8 @@ pub async fn post_messages(
         Ok(result) => result,
         Err(e) => {
             let (error_type, message) = match &e {
-                ConversionError::UnsupportedModel(model) => {
-                    ("invalid_request_error", format!("模型不支持: {}", model))
+                ConversionError::UnsupportedModel(_) => {
+                    ("invalid_request_error", "Not Found Model".to_string())
                 }
                 ConversionError::EmptyMessages => {
                     ("invalid_request_error", "消息列表为空".to_string())

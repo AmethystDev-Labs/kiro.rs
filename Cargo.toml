@@ -20,6 +20,7 @@ http = "1.0"
 futures = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.10", features = ["v1", "v4", "fast-rng"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres"] }
 fastrand = "2"
 sha2 = "0.10"
 hex = "0.4"
@@ -30,5 +31,9 @@ clap = { version = "4.5", features = ["derive"] }
 urlencoding = "2"
 parking_lot = "0.12"  # 高性能同步原语
 subtle = "2.6"        # 常量时间比较（防止时序攻击）
-rust-embed = "8"      # 嵌入静态文件
+rust-embed = { version = "8", optional = true } # 嵌入静态文件
 mime_guess = "2"      # MIME 类型推断
+
+[features]
+default = []
+embed-admin-ui = ["rust-embed"]

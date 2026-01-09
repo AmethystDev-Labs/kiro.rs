@@ -8,13 +8,35 @@ use axum::{
 
 use super::{
     middleware::AdminState,
-    types::{AddCredentialRequest, SetDisabledRequest, SetPriorityRequest, SuccessResponse},
+    types::{
+        AddCredentialRequest, SetDisabledRequest, SetPriorityRequest, SuccessResponse,
+        UpdateSettingsRequest,
+    },
 };
 
 /// GET /api/admin/credentials
 /// 获取所有凭据状态
 pub async fn get_all_credentials(State(state): State<AdminState>) -> impl IntoResponse {
     let response = state.service.get_all_credentials();
+    Json(response)
+}
+
+/// GET /api/admin/settings
+/// 获取管理设置
+pub async fn get_settings(State(state): State<AdminState>) -> impl IntoResponse {
+    let response = state.service.get_settings();
+    Json(response)
+}
+
+/// POST /api/admin/settings
+/// 更新管理设置
+pub async fn update_settings(
+    State(state): State<AdminState>,
+    Json(payload): Json<UpdateSettingsRequest>,
+) -> impl IntoResponse {
+    let response = state
+        .service
+        .update_settings(payload.auto_disable_on_failure);
     Json(response)
 }
 

@@ -16,21 +16,29 @@ use super::types::{ContentBlock, MessagesRequest, Thinking};
 
 /// 模型映射：将 Anthropic 模型名映射到 Kiro 模型 ID
 ///
-/// 按照用户要求：
-/// - 所有 sonnet → claude-sonnet-4.5
-/// - 所有 opus → claude-opus-4.5
-/// - 所有 haiku → claude-haiku-4.5
+/// 仅支持以下模型 ID（大小写不敏感）：
+/// - claude-sonnet-4-20250514
+/// - claude-3-5-sonnet-20241022
+/// - claude-sonnet-4-5-20250929
+/// - claude-opus-4-20250514
+/// - claude-opus-4-5-20251101
+/// - claude-haiku-4-20250514
+/// - claude-3-5-haiku-20241022
+/// - claude-haiku-4-5-20251001
 pub fn map_model(model: &str) -> Option<String> {
     let model_lower = model.to_lowercase();
 
-    if model_lower.contains("sonnet") {
-        Some("claude-sonnet-4.5".to_string())
-    } else if model_lower.contains("opus") {
-        Some("claude-opus-4.5".to_string())
-    } else if model_lower.contains("haiku") {
-        Some("claude-haiku-4.5".to_string())
-    } else {
-        None
+    match model_lower.as_str() {
+        "claude-sonnet-4-20250514"
+        | "claude-3-5-sonnet-20241022"
+        | "claude-sonnet-4-5-20250929" => Some("claude-sonnet-4.5".to_string()),
+        "claude-opus-4-20250514" | "claude-opus-4-5-20251101" => {
+            Some("claude-opus-4.5".to_string())
+        }
+        "claude-haiku-4-20250514"
+        | "claude-3-5-haiku-20241022"
+        | "claude-haiku-4-5-20251001" => Some("claude-haiku-4.5".to_string()),
+        _ => None,
     }
 }
 
@@ -51,7 +59,7 @@ pub enum ConversionError {
 impl std::fmt::Display for ConversionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConversionError::UnsupportedModel(model) => write!(f, "模型不支持: {}", model),
+            ConversionError::UnsupportedModel(model) => write!(f, "Not Found Model: {}", model),
             ConversionError::EmptyMessages => write!(f, "消息列表为空"),
         }
     }
@@ -554,46 +562,59 @@ mod tests {
 
     #[test]
     fn test_map_model_sonnet() {
-        assert!(
-            map_model("claude-sonnet-4-20250514")
-                .unwrap()
-                .contains("sonnet")
+        assert_eq!(
+            map_model("claude-sonnet-4-20250514").as_deref(),
+            Some("claude-sonnet-4.5")
         );
-        assert!(
-            map_model("claude-3-5-sonnet-20241022")
-                .unwrap()
-                .contains("sonnet")
+        assert_eq!(
+            map_model("claude-3-5-sonnet-20241022").as_deref(),
+            Some("claude-sonnet-4.5")
+        );
+        assert_eq!(
+            map_model("claude-sonnet-4-5-20250929").as_deref(),
+            Some("claude-sonnet-4.5")
         );
     }
 
     #[test]
     fn test_map_model_opus() {
-        assert!(
-            map_model("claude-opus-4-20250514")
-                .unwrap()
-                .contains("opus")
+        assert_eq!(
+            map_model("claude-opus-4-20250514").as_deref(),
+            Some("claude-opus-4.5")
+        );
+        assert_eq!(
+            map_model("claude-opus-4-5-20251101").as_deref(),
+            Some("claude-opus-4.5")
         );
     }
 
     #[test]
     fn test_map_model_haiku() {
-        assert!(
-            map_model("claude-haiku-4-20250514")
-                .unwrap()
-                .contains("haiku")
+        assert_eq!(
+            map_model("claude-haiku-4-20250514").as_deref(),
+            Some("claude-haiku-4.5")
+        );
+        assert_eq!(
+            map_model("claude-3-5-haiku-20241022").as_deref(),
+            Some("claude-haiku-4.5")
+        );
+        assert_eq!(
+            map_model("claude-haiku-4-5-20251001").as_deref(),
+            Some("claude-haiku-4.5")
         );
     }
 
     #[test]
     fn test_map_model_unsupported() {
         assert!(map_model("gpt-4").is_none());
+        assert!(map_model("claude-sonnet-4").is_none());
     }
 
     #[test]
     fn test_determine_chat_trigger_type() {
         // 无工具时返回 MANUAL
         let req = MessagesRequest {
-            model: "claude-sonnet-4".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
             max_tokens: 1024,
             messages: vec![],
             stream: false,
@@ -661,7 +682,7 @@ mod tests {
 
         // 创建一个请求，历史中有工具使用，但 tools 列表为空
         let req = MessagesRequest {
-            model: "claude-sonnet-4".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
             max_tokens: 1024,
             messages: vec![
                 AnthropicMessage {
@@ -740,7 +761,7 @@ mod tests {
 
         // 测试带有 metadata 的请求，应该使用 session UUID 作为 conversationId
         let req = MessagesRequest {
-            model: "claude-sonnet-4".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
             max_tokens: 1024,
             messages: vec![AnthropicMessage {
                 role: "user".to_string(),
@@ -771,7 +792,7 @@ mod tests {
 
         // 测试没有 metadata 的请求，应该生成新的 UUID
         let req = MessagesRequest {
-            model: "claude-sonnet-4".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
             max_tokens: 1024,
             messages: vec![AnthropicMessage {
                 role: "user".to_string(),

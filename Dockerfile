@@ -15,7 +15,7 @@ COPY Cargo.toml Cargo.lock* ./
 COPY src ./src
 COPY --from=frontend-builder /app/admin-ui/dist /app/admin-ui/dist
 
-RUN cargo build --release
+RUN cargo build --release --features embed-admin-ui
 
 FROM alpine:3.21
 

@@ -58,6 +58,10 @@ pub struct Config {
     /// Admin API 密钥（可选，启用 Admin API 功能）
     #[serde(default)]
     pub admin_api_key: Option<String>,
+
+    /// 是否在凭据连续失败达到阈值后自动禁用（默认 true）
+    #[serde(default = "default_auto_disable_on_failure")]
+    pub auto_disable_on_failure: bool,
 }
 
 fn default_host() -> String {
@@ -89,6 +93,10 @@ fn default_count_tokens_auth_type() -> String {
     "x-api-key".to_string()
 }
 
+fn default_auto_disable_on_failure() -> bool {
+    true
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -107,6 +115,7 @@ impl Default for Config {
             proxy_username: None,
             proxy_password: None,
             admin_api_key: None,
+            auto_disable_on_failure: default_auto_disable_on_failure(),
         }
     }
 }

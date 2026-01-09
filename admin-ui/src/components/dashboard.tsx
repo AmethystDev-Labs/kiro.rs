@@ -4,12 +4,14 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { storage } from '@/lib/storage'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { CredentialCard } from '@/components/credential-card'
 import { BalanceDialog } from '@/components/balance-dialog'
 import { AddCredentialDialog } from '@/components/add-credential-dialog'
 import { useCredentials } from '@/hooks/use-credentials'
+import { useSettings, useUpdateSettings } from '@/hooks/use-settings'
 
 interface DashboardProps {
   onLogout: () => void
@@ -28,6 +30,13 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
   const queryClient = useQueryClient()
   const { data, isLoading, error, refetch } = useCredentials()
+  const settingsQuery = useSettings()
+  const updateSettings = useUpdateSettings()
+
+  const autoDisableOnFailure =
+    settingsQuery.data?.autoDisableOnFailure ?? true
+  const settingsDisabled =
+    settingsQuery.isLoading || settingsQuery.isError || updateSettings.isPending
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode)
@@ -41,7 +50,22 @@ export function Dashboard({ onLogout }: DashboardProps) {
 
   const handleRefresh = () => {
     refetch()
-    toast.success('已刷新凭据列表')
+    settingsQuery.refetch()
+    toast.success('已刷新数据')
+  }
+
+  const handleAutoDisableToggle = (checked: boolean) => {
+    updateSettings.mutate(
+      { autoDisableOnFailure: checked },
+      {
+        onSuccess: () => {
+          toast.success(checked ? '已开启自动禁用' : '已关闭自动禁用')
+        },
+        onError: () => {
+          toast.error('设置更新失败')
+        },
+      }
+    )
   }
 
   const handleLogout = () => {
@@ -136,6 +160,33 @@ export function Dashboard({ onLogout }: DashboardProps) {
                 #{data?.currentId || '-'}
                 <Badge variant="success">活跃</Badge>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* 管理设置 */}
+        <div className="grid gap-4 mb-6">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                管理设置
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center justify-between gap-6">
+              <div>
+                <div className="text-sm font-medium">自动禁用失败凭据</div>
+                <p className="text-xs text-muted-foreground">
+                  连续失败达到阈值后自动禁用该凭据，重启后恢复为配置文件
+                </p>
+                {settingsQuery.isError ? (
+                  <p className="text-xs text-red-500 mt-2">设置加载失败</p>
+                ) : null}
+              </div>
+              <Switch
+                checked={autoDisableOnFailure}
+                onCheckedChange={handleAutoDisableToggle}
+                disabled={settingsDisabled}
+              />
             </CardContent>
           </Card>
         </div>
