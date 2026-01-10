@@ -1,6 +1,14 @@
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::fs;
 use std::path::Path;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CredentialsBackend {
+    File,
+    Postgres,
+}
 
 /// KNA 应用配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +66,14 @@ pub struct Config {
     /// Admin API 密钥（可选，启用 Admin API 功能）
     #[serde(default)]
     pub admin_api_key: Option<String>,
+
+    /// 凭据存储后端（file / postgres）
+    #[serde(default = "default_credentials_backend")]
+    pub credentials_backend: CredentialsBackend,
+
+    /// PostgreSQL 连接地址（credentials_backend=postgres 时必填）
+    #[serde(default)]
+    pub db_url: Option<String>,
 }
 
 fn default_host() -> String {
@@ -89,6 +105,10 @@ fn default_count_tokens_auth_type() -> String {
     "x-api-key".to_string()
 }
 
+fn default_credentials_backend() -> CredentialsBackend {
+    CredentialsBackend::File
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -107,6 +127,8 @@ impl Default for Config {
             proxy_username: None,
             proxy_password: None,
             admin_api_key: None,
+            credentials_backend: default_credentials_backend(),
+            db_url: None,
         }
     }
 }
@@ -129,4 +151,37 @@ impl Config {
         let config: Config = serde_json::from_str(&content)?;
         Ok(config)
     }
+
+    pub fn resolve_db_url(&self) -> anyhow::Result<String> {
+        let raw = self
+            .db_url
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("credentials_backend=postgres 时必须配置 dbUrl"))?;
+        expand_env_vars(raw)
+    }
+}
+
+fn expand_env_vars(input: &str) -> anyhow::Result<String> {
+    let mut result = String::new();
+    let mut rest = input;
+
+    while let Some(start) = rest.find("${") {
+        result.push_str(&rest[..start]);
+        rest = &rest[start + 2..];
+
+        let end = rest
+            .find('}')
+            .ok_or_else(|| anyhow::anyhow!("环境变量占位符未闭合"))?;
+        let key = &rest[..end];
+        if key.is_empty() {
+            anyhow::bail!("环境变量名不能为空");
+        }
+        let value = env::var(key)
+            .map_err(|_| anyhow::anyhow!("环境变量未设置: {}", key))?;
+        result.push_str(&value);
+        rest = &rest[end + 1..];
+    }
+
+    result.push_str(rest);
+    Ok(result)
 }

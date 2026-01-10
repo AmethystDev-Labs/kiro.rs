@@ -10,11 +10,12 @@ pub mod token;
 use std::sync::Arc;
 
 use clap::Parser;
+use kiro::db_token_manager::DbTokenManager;
 use kiro::model::credentials::{CredentialsConfig, KiroCredentials};
 use kiro::provider::KiroProvider;
-use kiro::token_manager::MultiTokenManager;
+use kiro::token_manager::{MultiTokenManager, TokenManagerOps};
 use model::arg::Args;
-use model::config::Config;
+use model::config::{Config, CredentialsBackend};
 
 #[tokio::main]
 async fn main() {
@@ -38,25 +39,67 @@ async fn main() {
         std::process::exit(1);
     });
 
-    // 加载凭证（支持单对象或数组格式）
-    let credentials_path = args
-        .credentials
-        .unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
-    let credentials_config = CredentialsConfig::load(&credentials_path).unwrap_or_else(|e| {
-        tracing::error!("加载凭证失败: {}", e);
-        std::process::exit(1);
-    });
+    let token_manager: Arc<dyn TokenManagerOps> = match config.credentials_backend {
+        CredentialsBackend::File => {
+            // 加载凭证（支持单对象或数组格式）
+            let credentials_path = args
+                .credentials
+                .unwrap_or_else(|| KiroCredentials::default_credentials_path().to_string());
+            let credentials_config =
+                CredentialsConfig::load(&credentials_path).unwrap_or_else(|e| {
+                    tracing::error!("加载凭证失败: {}", e);
+                    std::process::exit(1);
+                });
 
-    // 判断是否为多凭据格式（用于刷新后回写）
-    let is_multiple_format = credentials_config.is_multiple();
+            // 判断是否为多凭据格式（用于刷新后回写）
+            let is_multiple_format = credentials_config.is_multiple();
 
-    // 转换为按优先级排序的凭据列表
-    let credentials_list = credentials_config.into_sorted_credentials();
-    tracing::info!("已加载 {} 个凭据配置", credentials_list.len());
+            // 转换为按优先级排序的凭据列表
+            let credentials_list = credentials_config.into_sorted_credentials();
+            tracing::info!("已加载 {} 个凭据配置", credentials_list.len());
 
-    // 获取第一个凭据用于日志显示
-    let first_credentials = credentials_list.first().cloned().unwrap_or_default();
-    tracing::debug!("主凭证: {:?}", first_credentials);
+            // 获取第一个凭据用于日志显示
+            let first_credentials = credentials_list.first().cloned().unwrap_or_default();
+            tracing::debug!("主凭证: {:?}", first_credentials);
+
+            let token_manager = MultiTokenManager::new(
+                config.clone(),
+                credentials_list,
+                proxy_config.clone(),
+                Some(credentials_path.into()),
+                is_multiple_format,
+            )
+            .unwrap_or_else(|e| {
+                tracing::error!("创建 Token 管理器失败: {}", e);
+                std::process::exit(1);
+            });
+            Arc::new(token_manager)
+        }
+        CredentialsBackend::Postgres => {
+            let db_url = config.resolve_db_url().unwrap_or_else(|e| {
+                tracing::error!("解析 dbUrl 失败: {}", e);
+                std::process::exit(1);
+            });
+
+            let token_manager =
+                DbTokenManager::connect(config.clone(), proxy_config.clone(), db_url)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::error!("连接 PostgreSQL 失败: {}", e);
+                        std::process::exit(1);
+                    });
+
+            let total = match token_manager.total_count().await {
+                Ok(count) => count,
+                Err(e) => {
+                    tracing::warn!("读取 PostgreSQL 凭据数量失败: {}", e);
+                    0
+                }
+            };
+            tracing::info!("已加载 {} 个凭据配置（PostgreSQL）", total);
+            Arc::new(token_manager)
+        }
+    };
 
     // 获取 API Key
     let api_key = config.api_key.clone().unwrap_or_else(|| {
@@ -77,19 +120,7 @@ async fn main() {
         tracing::info!("已配置 HTTP 代理: {}", config.proxy_url.as_ref().unwrap());
     }
 
-    // 创建 MultiTokenManager 和 KiroProvider
-    let token_manager = MultiTokenManager::new(
-        config.clone(),
-        credentials_list,
-        proxy_config.clone(),
-        Some(credentials_path.into()),
-        is_multiple_format,
-    )
-    .unwrap_or_else(|e| {
-        tracing::error!("创建 Token 管理器失败: {}", e);
-        std::process::exit(1);
-    });
-    let token_manager = Arc::new(token_manager);
+    // 创建 TokenManager 和 KiroProvider
     let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
 
     // 初始化 count_tokens 配置
@@ -101,11 +132,9 @@ async fn main() {
     });
 
     // 构建 Anthropic API 路由（从第一个凭据获取 profile_arn）
-    let anthropic_app = anthropic::create_router_with_provider(
-        &api_key,
-        Some(kiro_provider),
-        first_credentials.profile_arn.clone(),
-    );
+    let profile_arn = token_manager.get_profile_arn().await.unwrap_or(None);
+    let anthropic_app =
+        anthropic::create_router_with_provider(&api_key, Some(kiro_provider), profile_arn);
 
     // 构建 Admin API 路由（如果配置了非空的 admin_api_key）
     // 安全检查：空字符串被视为未配置，防止空 key 绕过认证

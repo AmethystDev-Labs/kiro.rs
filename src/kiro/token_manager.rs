@@ -4,6 +4,7 @@
 //! 支持单凭据 (TokenManager) 和多凭据 (MultiTokenManager) 管理
 
 use anyhow::bail;
+use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -460,6 +461,25 @@ pub struct CallContext {
     pub credentials: KiroCredentials,
     /// 访问 Token
     pub token: String,
+}
+
+#[async_trait]
+pub trait TokenManagerOps: Send + Sync {
+    fn config(&self) -> &Config;
+    async fn total_count(&self) -> anyhow::Result<usize>;
+    async fn available_count(&self) -> anyhow::Result<usize>;
+    async fn acquire_context(&self) -> anyhow::Result<CallContext>;
+    async fn report_success(&self, id: u64) -> anyhow::Result<()>;
+    async fn report_failure(&self, id: u64) -> anyhow::Result<bool>;
+    async fn report_quota_exhausted(&self, id: u64) -> anyhow::Result<bool>;
+    async fn snapshot(&self) -> anyhow::Result<ManagerSnapshot>;
+    async fn set_disabled(&self, id: u64, disabled: bool) -> anyhow::Result<()>;
+    async fn set_priority(&self, id: u64, priority: u32) -> anyhow::Result<()>;
+    async fn reset_and_enable(&self, id: u64) -> anyhow::Result<()>;
+    async fn get_usage_limits_for(&self, id: u64) -> anyhow::Result<UsageLimitsResponse>;
+    async fn add_credential(&self, new_cred: KiroCredentials) -> anyhow::Result<u64>;
+    async fn delete_credential(&self, id: u64) -> anyhow::Result<()>;
+    async fn get_profile_arn(&self) -> anyhow::Result<Option<String>>;
 }
 
 impl MultiTokenManager {
@@ -1241,6 +1261,70 @@ impl MultiTokenManager {
 
         tracing::info!("已删除凭据 #{}", id);
         Ok(())
+    }
+}
+
+#[async_trait]
+impl TokenManagerOps for MultiTokenManager {
+    fn config(&self) -> &Config {
+        self.config()
+    }
+
+    async fn total_count(&self) -> anyhow::Result<usize> {
+        Ok(self.total_count())
+    }
+
+    async fn available_count(&self) -> anyhow::Result<usize> {
+        Ok(self.available_count())
+    }
+
+    async fn acquire_context(&self) -> anyhow::Result<CallContext> {
+        self.acquire_context().await
+    }
+
+    async fn report_success(&self, id: u64) -> anyhow::Result<()> {
+        self.report_success(id);
+        Ok(())
+    }
+
+    async fn report_failure(&self, id: u64) -> anyhow::Result<bool> {
+        Ok(self.report_failure(id))
+    }
+
+    async fn report_quota_exhausted(&self, id: u64) -> anyhow::Result<bool> {
+        Ok(self.report_quota_exhausted(id))
+    }
+
+    async fn snapshot(&self) -> anyhow::Result<ManagerSnapshot> {
+        Ok(self.snapshot())
+    }
+
+    async fn set_disabled(&self, id: u64, disabled: bool) -> anyhow::Result<()> {
+        self.set_disabled(id, disabled)
+    }
+
+    async fn set_priority(&self, id: u64, priority: u32) -> anyhow::Result<()> {
+        self.set_priority(id, priority)
+    }
+
+    async fn reset_and_enable(&self, id: u64) -> anyhow::Result<()> {
+        self.reset_and_enable(id)
+    }
+
+    async fn get_usage_limits_for(&self, id: u64) -> anyhow::Result<UsageLimitsResponse> {
+        self.get_usage_limits_for(id).await
+    }
+
+    async fn add_credential(&self, new_cred: KiroCredentials) -> anyhow::Result<u64> {
+        self.add_credential(new_cred).await
+    }
+
+    async fn delete_credential(&self, id: u64) -> anyhow::Result<()> {
+        self.delete_credential(id)
+    }
+
+    async fn get_profile_arn(&self) -> anyhow::Result<Option<String>> {
+        Ok(self.credentials().profile_arn.clone())
     }
 }
 

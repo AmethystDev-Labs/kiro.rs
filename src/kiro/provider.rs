@@ -13,10 +13,12 @@ use uuid::Uuid;
 
 use crate::http_client::{ProxyConfig, build_client};
 use crate::kiro::machine_id;
-use crate::kiro::token_manager::{CallContext, MultiTokenManager};
+use crate::kiro::token_manager::{CallContext, TokenManagerOps};
 
 #[cfg(test)]
 use crate::kiro::model::credentials::KiroCredentials;
+#[cfg(test)]
+use crate::kiro::token_manager::MultiTokenManager;
 
 /// 每个凭据的最大重试次数
 const MAX_RETRIES_PER_CREDENTIAL: usize = 3;
@@ -29,18 +31,18 @@ const MAX_TOTAL_RETRIES: usize = 9;
 /// 核心组件，负责与 Kiro API 通信
 /// 支持多凭据故障转移和重试机制
 pub struct KiroProvider {
-    token_manager: Arc<MultiTokenManager>,
+    token_manager: Arc<dyn TokenManagerOps>,
     client: Client,
 }
 
 impl KiroProvider {
     /// 创建新的 KiroProvider 实例
-    pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
+    pub fn new(token_manager: Arc<dyn TokenManagerOps>) -> Self {
         Self::with_proxy(token_manager, None)
     }
 
     /// 创建带代理配置的 KiroProvider 实例
-    pub fn with_proxy(token_manager: Arc<MultiTokenManager>, proxy: Option<ProxyConfig>) -> Self {
+    pub fn with_proxy(token_manager: Arc<dyn TokenManagerOps>, proxy: Option<ProxyConfig>) -> Self {
         let client = build_client(proxy.as_ref(), 720) // 12 分钟超时
             .expect("创建 HTTP 客户端失败");
 
@@ -51,7 +53,7 @@ impl KiroProvider {
     }
 
     /// 获取 token_manager 的引用
-    pub fn token_manager(&self) -> &MultiTokenManager {
+    pub fn token_manager(&self) -> &Arc<dyn TokenManagerOps> {
         &self.token_manager
     }
 
@@ -168,7 +170,7 @@ impl KiroProvider {
         request_body: &str,
         is_stream: bool,
     ) -> anyhow::Result<reqwest::Response> {
-        let total_credentials = self.token_manager.total_count();
+        let total_credentials = self.token_manager.total_count().await?;
         let max_retries = (total_credentials * MAX_RETRIES_PER_CREDENTIAL).min(MAX_TOTAL_RETRIES);
         let mut last_error: Option<anyhow::Error> = None;
         let api_type = if is_stream { "流式" } else { "非流式" };
@@ -223,7 +225,9 @@ impl KiroProvider {
 
             // 成功响应
             if status.is_success() {
-                self.token_manager.report_success(ctx.id);
+                if let Err(e) = self.token_manager.report_success(ctx.id).await {
+                    tracing::warn!("更新凭据成功状态失败: {}", e);
+                }
                 return Ok(response);
             }
 
@@ -240,7 +244,7 @@ impl KiroProvider {
                     body
                 );
 
-                let has_available = self.token_manager.report_quota_exhausted(ctx.id);
+                let has_available = self.token_manager.report_quota_exhausted(ctx.id).await?;
                 if !has_available {
                     anyhow::bail!(
                         "{} API 请求失败（所有凭据已用尽）: {} {}",
@@ -269,7 +273,7 @@ impl KiroProvider {
                     body
                 );
 
-                let has_available = self.token_manager.report_failure(ctx.id);
+                let has_available = self.token_manager.report_failure(ctx.id).await?;
                 if !has_available {
                     anyhow::bail!(
                         "{} API 请求失败（所有凭据已用尽）: {} {}",

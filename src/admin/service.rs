@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::kiro::model::credentials::KiroCredentials;
-use crate::kiro::token_manager::MultiTokenManager;
+use crate::kiro::token_manager::TokenManagerOps;
 
 use super::error::AdminServiceError;
 use super::types::{
@@ -15,17 +15,21 @@ use super::types::{
 ///
 /// 封装所有 Admin API 的业务逻辑
 pub struct AdminService {
-    token_manager: Arc<MultiTokenManager>,
+    token_manager: Arc<dyn TokenManagerOps>,
 }
 
 impl AdminService {
-    pub fn new(token_manager: Arc<MultiTokenManager>) -> Self {
+    pub fn new(token_manager: Arc<dyn TokenManagerOps>) -> Self {
         Self { token_manager }
     }
 
     /// 获取所有凭据状态
-    pub fn get_all_credentials(&self) -> CredentialsStatusResponse {
-        let snapshot = self.token_manager.snapshot();
+    pub async fn get_all_credentials(&self) -> Result<CredentialsStatusResponse, AdminServiceError> {
+        let snapshot = self
+            .token_manager
+            .snapshot()
+            .await
+            .map_err(|e| AdminServiceError::InternalError(e.to_string()))?;
 
         let mut credentials: Vec<CredentialStatusItem> = snapshot
             .entries
@@ -45,42 +49,36 @@ impl AdminService {
         // 按优先级排序（数字越小优先级越高）
         credentials.sort_by_key(|c| c.priority);
 
-        CredentialsStatusResponse {
+        Ok(CredentialsStatusResponse {
             total: snapshot.total,
             available: snapshot.available,
             current_id: snapshot.current_id,
             credentials,
-        }
+        })
     }
 
     /// 设置凭据禁用状态
-    pub fn set_disabled(&self, id: u64, disabled: bool) -> Result<(), AdminServiceError> {
-        // 先获取当前凭据 ID，用于判断是否需要切换
-        let snapshot = self.token_manager.snapshot();
-        let current_id = snapshot.current_id;
-
+    pub async fn set_disabled(&self, id: u64, disabled: bool) -> Result<(), AdminServiceError> {
         self.token_manager
             .set_disabled(id, disabled)
+            .await
             .map_err(|e| self.classify_error(e, id))?;
-
-        // 只有禁用的是当前凭据时才尝试切换到下一个
-        if disabled && id == current_id {
-            let _ = self.token_manager.switch_to_next();
-        }
         Ok(())
     }
 
     /// 设置凭据优先级
-    pub fn set_priority(&self, id: u64, priority: u32) -> Result<(), AdminServiceError> {
+    pub async fn set_priority(&self, id: u64, priority: u32) -> Result<(), AdminServiceError> {
         self.token_manager
             .set_priority(id, priority)
+            .await
             .map_err(|e| self.classify_error(e, id))
     }
 
     /// 重置失败计数并重新启用
-    pub fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
+    pub async fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
             .reset_and_enable(id)
+            .await
             .map_err(|e| self.classify_error(e, id))
     }
 
@@ -145,9 +143,10 @@ impl AdminService {
     }
 
     /// 删除凭据
-    pub fn delete_credential(&self, id: u64) -> Result<(), AdminServiceError> {
+    pub async fn delete_credential(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
             .delete_credential(id)
+            .await
             .map_err(|e| self.classify_delete_error(e, id))
     }
 

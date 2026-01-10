@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use std::sync::Arc;
 
 use crate::debug::{print_event, print_event_verbose, debug_crc, print_hex};
 use crate::kiro::model::credentials::KiroCredentials;
@@ -6,7 +7,7 @@ use crate::kiro::model::events::Event;
 use crate::kiro::model::requests::KiroRequest;
 use crate::kiro::parser::EventStreamDecoder;
 use crate::kiro::provider::KiroProvider;
-use crate::kiro::token_manager::TokenManager;
+use crate::kiro::token_manager::MultiTokenManager;
 use crate::model::config::Config;
 
 
@@ -40,8 +41,9 @@ pub(crate) async fn call_stream_api() -> anyhow::Result<()> {
     println!("API 区域: {}", config.region);
 
     // 创建 TokenManager 和 KiroProvider
-    let token_manager = TokenManager::new(config, credentials);
-    let mut provider = KiroProvider::new(token_manager);
+    let token_manager =
+        MultiTokenManager::new(config, vec![credentials], None, None, false)?;
+    let provider = KiroProvider::new(Arc::new(token_manager));
 
     println!("\n开始调用流式 API...\n");
     println!("{}", "=".repeat(60));

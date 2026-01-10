@@ -4,4 +4,5 @@ pub mod machine_id;
 pub mod model;
 pub mod parser;
 pub mod provider;
+pub mod db_token_manager;
 pub mod token_manager;
