@@ -2,8 +2,6 @@
 //!
 //! 用于多实例场景：所有状态以数据库为准，不使用本地缓存。
 
-use std::sync::Arc;
-
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use tokio_postgres::{Client, NoTls, Row};
@@ -28,7 +26,7 @@ const DISABLED_REASON_QUOTA_EXCEEDED: &str = "QuotaExceeded";
 pub struct DbTokenManager {
     config: Config,
     proxy: Option<ProxyConfig>,
-    client: Arc<Client>,
+    client: Client,
 }
 
 impl DbTokenManager {
@@ -50,7 +48,7 @@ impl DbTokenManager {
         let manager = Self {
             config,
             proxy,
-            client: Arc::new(client),
+            client,
         };
         manager.ensure_schema().await?;
         Ok(manager)
