@@ -39,6 +39,19 @@ async fn main() {
         std::process::exit(1);
     });
 
+    // 构建代理配置
+    let proxy_config = config.proxy_url.as_ref().map(|url| {
+        let mut proxy = http_client::ProxyConfig::new(url);
+        if let (Some(username), Some(password)) = (&config.proxy_username, &config.proxy_password) {
+            proxy = proxy.with_auth(username, password);
+        }
+        proxy
+    });
+
+    if proxy_config.is_some() {
+        tracing::info!("已配置 HTTP 代理: {}", config.proxy_url.as_ref().unwrap());
+    }
+
     let token_manager: Arc<dyn TokenManagerOps> = match config.credentials_backend {
         CredentialsBackend::File => {
             // 加载凭证（支持单对象或数组格式）
@@ -106,19 +119,6 @@ async fn main() {
         tracing::error!("配置文件中未设置 apiKey");
         std::process::exit(1);
     });
-
-    // 构建代理配置
-    let proxy_config = config.proxy_url.as_ref().map(|url| {
-        let mut proxy = http_client::ProxyConfig::new(url);
-        if let (Some(username), Some(password)) = (&config.proxy_username, &config.proxy_password) {
-            proxy = proxy.with_auth(username, password);
-        }
-        proxy
-    });
-
-    if proxy_config.is_some() {
-        tracing::info!("已配置 HTTP 代理: {}", config.proxy_url.as_ref().unwrap());
-    }
 
     // 创建 TokenManager 和 KiroProvider
     let kiro_provider = KiroProvider::with_proxy(token_manager.clone(), proxy_config.clone());
