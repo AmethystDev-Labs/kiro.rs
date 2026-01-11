@@ -10,6 +10,7 @@
 - **多凭据支持**: 支持配置多个凭据，按优先级自动故障转移
 - **智能重试**: 单凭据最多重试 3 次，单请求最多重试 9 次
 - **凭据回写**: 多凭据格式下自动回写刷新后的 Token
+- **PostgreSQL 存储**: 支持使用 PostgreSQL 作为凭据后端（多实例热更新）
 - **Thinking 模式**: 支持 Claude 的 extended thinking 功能
 - **工具调用**: 完整支持 function calling / tool use
 - **多模型支持**: 支持 Sonnet、Opus、Haiku 系列模型
@@ -55,7 +56,9 @@ cargo build --release
    "proxyUrl": "http://127.0.0.1:7890", // 可选, HTTP/SOCK5代理, 不需要请删除
    "proxyUsername": "user",  // 可选, HTTP/SOCK5代理用户名, 不需要请删除
    "proxyPassword": "pass",  // 可选, HTTP/SOCK5代理密码, 不需要请删除
-   "adminApiKey": "sk-admin-your-secret-key"  // 可选, Admin API 密钥, 用于启用凭据管理 API, 不需要请删除
+   "adminApiKey": "sk-admin-your-secret-key",  // 可选, Admin API 密钥, 用于启用凭据管理 API, 不需要请删除
+   "credentialsBackend": "file",  // 可选, 凭据后端: file/postgres, 默认为 file
+   "dbUrl": "${KIRO_DB_URL}"  // 可选, PostgreSQL 连接地址, credentialsBackend=postgres 时必配
 }
 ```
 最小启动配置为: 
@@ -70,6 +73,8 @@ cargo build --release
 ### 3. 凭证文件
 
 创建 `credentials.json` 凭证文件（从 Kiro IDE 获取）。支持两种格式：
+
+> **说明**：当 `credentialsBackend=postgres` 时不读取 `credentials.json`。
 
 #### 单凭据格式（旧格式，向后兼容）
 
@@ -179,6 +184,8 @@ curl http://127.0.0.1:8990/v1/messages \
 | `proxyUsername` | string | - | 代理用户名（可选） |
 | `proxyPassword` | string | - | 代理密码（可选） |
 | `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API（可选） |
+| `credentialsBackend` | string | `file` | 凭据后端：`file` 或 `postgres` |
+| `dbUrl` | string | - | PostgreSQL 连接地址（仅在 `credentialsBackend=postgres` 时使用，支持 `${ENV}` 引用环境变量） |
 
 ### credentials.json
 
@@ -194,6 +201,19 @@ curl http://127.0.0.1:8990/v1/messages \
 | `clientId` | string | IdC 登录的客户端 ID（可选）      |
 | `clientSecret` | string | IdC 登录的客户端密钥（可选）      |
 | `priority` | number | 凭据优先级，数字越小越优先，默认为 0（多凭据格式时有效）|
+
+### PostgreSQL 凭据后端
+
+当 `credentialsBackend=postgres` 时，凭据存储在 PostgreSQL，支持多实例热更新。
+
+```json
+{
+   "credentialsBackend": "postgres",
+   "dbUrl": "${KIRO_DB_URL}"
+}
+```
+
+> 注意：`dbUrl` 使用 `${ENV}` 时必须保证环境变量已设置，否则启动直接报错。
 
 ## 模型映射
 
@@ -326,6 +346,12 @@ kiro-rs/
 
 ```bash
 RUST_LOG=debug ./target/release/kiro-rs
+```
+
+PostgreSQL 连接地址示例：
+
+```bash
+$env:KIRO_DB_URL="postgres://user:pass@127.0.0.1:5432/kiro"
 ```
 
 ## 注意事项
