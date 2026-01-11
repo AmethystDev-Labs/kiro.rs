@@ -27,6 +27,7 @@ pub struct DbTokenManager {
     config: Config,
     proxy: Option<ProxyConfig>,
     client: Client,
+    db_url: String,
 }
 
 impl DbTokenManager {
@@ -49,6 +50,7 @@ impl DbTokenManager {
             config,
             proxy,
             client,
+            db_url,
         };
         manager.ensure_schema().await?;
         Ok(manager)
@@ -239,7 +241,16 @@ impl DbTokenManager {
         let needs_refresh = is_token_expired(&creds) || is_token_expiring_soon(&creds);
 
         if needs_refresh {
-            let tx = self.client.build_transaction().start().await?;
+            let (client, connection) = tokio_postgres::connect(&self.db_url, NoTls)
+                .await
+                .context("连接 PostgreSQL 失败")?;
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    tracing::error!("PostgreSQL 事务连接异常: {}", e);
+                }
+            });
+            let mut client = client;
+            let tx = client.build_transaction().start().await?;
             tx.execute("SELECT pg_advisory_xact_lock($1)", &[&row.id])
                 .await?;
 
@@ -449,7 +460,16 @@ impl DbTokenManager {
         let needs_refresh = is_token_expired(&creds) || is_token_expiring_soon(&creds);
 
         let token = if needs_refresh {
-            let tx = self.client.build_transaction().start().await?;
+            let (client, connection) = tokio_postgres::connect(&self.db_url, NoTls)
+                .await
+                .context("连接 PostgreSQL 失败")?;
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    tracing::error!("PostgreSQL 事务连接异常: {}", e);
+                }
+            });
+            let mut client = client;
+            let tx = client.build_transaction().start().await?;
             tx.execute("SELECT pg_advisory_xact_lock($1)", &[&row.id])
                 .await?;
 
