@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -17,7 +18,7 @@ pub struct Config {
     #[serde(default = "default_host")]
     pub host: String,
 
-    #[serde(default = "default_port")]
+    #[serde(default = "default_port", deserialize_with = "deserialize_port")]
     pub port: u16,
 
     #[serde(default = "default_region")]
@@ -148,7 +149,9 @@ impl Config {
         }
 
         let content = fs::read_to_string(path)?;
-        let config: Config = serde_json::from_str(&content)?;
+        let mut raw: Value = serde_json::from_str(&content)?;
+        expand_env_vars_in_value(&mut raw)?;
+        let config: Config = serde_json::from_value(raw)?;
         Ok(config)
     }
 
@@ -159,6 +162,77 @@ impl Config {
             .ok_or_else(|| anyhow::anyhow!("credentials_backend=postgres 时必须配置 dbUrl"))?;
         expand_env_vars(raw)
     }
+}
+
+fn expand_env_vars_in_value(value: &mut Value) -> anyhow::Result<()> {
+    match value {
+        Value::String(raw) => {
+            let expanded = expand_env_vars(raw)?;
+            *raw = expanded;
+            Ok(())
+        }
+        Value::Array(items) => {
+            for item in items {
+                expand_env_vars_in_value(item)?;
+            }
+            Ok(())
+        }
+        Value::Object(map) => {
+            for value in map.values_mut() {
+                expand_env_vars_in_value(value)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn deserialize_port<'de, D>(deserializer: D) -> Result<u16, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct PortVisitor;
+
+    impl<'de> serde::de::Visitor<'de> for PortVisitor {
+        type Value = u16;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a u16 or a string containing a u16")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            u16::try_from(value).map_err(|_| E::custom("port out of range"))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            if value < 0 {
+                return Err(E::custom("port must be non-negative"));
+            }
+            u16::try_from(value).map_err(|_| E::custom("port out of range"))
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            value.parse::<u16>().map_err(|_| E::custom("invalid port"))
+        }
+
+        fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            self.visit_str(&value)
+        }
+    }
+
+    deserializer.deserialize_any(PortVisitor)
 }
 
 fn expand_env_vars(input: &str) -> anyhow::Result<String> {
