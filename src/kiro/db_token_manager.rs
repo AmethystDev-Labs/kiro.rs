@@ -239,7 +239,8 @@ impl DbTokenManager {
         let needs_refresh = is_token_expired(&creds) || is_token_expiring_soon(&creds);
 
         if needs_refresh {
-            let tx = self.client.build_transaction().start().await?;
+            let mut client = self.client.clone();
+            let tx = client.build_transaction().start().await?;
             tx.execute("SELECT pg_advisory_xact_lock($1)", &[&row.id])
                 .await?;
 
@@ -449,7 +450,8 @@ impl DbTokenManager {
         let needs_refresh = is_token_expired(&creds) || is_token_expiring_soon(&creds);
 
         let token = if needs_refresh {
-            let tx = self.client.build_transaction().start().await?;
+            let mut client = self.client.clone();
+            let tx = client.build_transaction().start().await?;
             tx.execute("SELECT pg_advisory_xact_lock($1)", &[&row.id])
                 .await?;
 
