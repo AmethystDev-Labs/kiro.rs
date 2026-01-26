@@ -19,6 +19,7 @@
 - **Token 自动刷新**: 自动管理和刷新 OAuth Token
 - **多凭据支持**: 支持配置多个凭据，按优先级自动故障转移
 - **智能重试**: 单凭据最多重试 3 次，单请求最多重试 9 次
+- **多种后端支持**: 支持本地 JSON 文件或 PostgreSQL 数据库存储凭据
 - **凭据回写**: 多凭据格式下自动回写刷新后的 Token
 - **Thinking 模式**: 支持 Claude 的 extended thinking 功能
 - **工具调用**: 完整支持 function calling / tool use
@@ -126,6 +127,7 @@ cargo build --release
 > - 多凭据格式下 Token 刷新后自动回写到源文件
 > - 可选的 `region` 字段：用于 OIDC token 刷新时指定 endpoint 区域，未配置时回退到 config.json 的 region
 > - 可选的 `machineId` 字段：凭据级机器码；未配置时回退到 config.json 的 machineId；都未配置时由 refreshToken 派生
+- **PostgreSQL 后端支持**：当 `credentialsBackend` 设置为 `postgres` 时，系统将自动在数据库中创建 `credentials` 表并同步数据。`dbUrl` 支持 `${ENV_NAME}` 格式来引用环境变量，例如：`postgres://user:${DB_PASS}@localhost:5432/dbname`
 
 最小启动配置(social):
 ```json
@@ -195,6 +197,8 @@ curl http://127.0.0.1:8990/v1/messages \
 | `proxyUsername` | string | - | 代理用户名（可选） |
 | `proxyPassword` | string | - | 代理密码（可选） |
 | `adminApiKey` | string | - | Admin API 密钥，配置后启用凭据管理 API, 填写后才会启用web管理（可选） |
+| `credentialsBackend` | string | `file` | 凭据存储后端：`file`（文件）或 `postgres`（PostgreSQL 数据库） |
+| `dbUrl` | string | - | PostgreSQL 连接地址（仅在 `credentialsBackend=postgres` 时使用，支持 `${ENV}` 引用环境变量） |
 
 ### credentials.json
 

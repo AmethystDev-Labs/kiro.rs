@@ -54,13 +54,14 @@ impl AdminService {
     }
 
     /// 设置凭据禁用状态
-    pub fn set_disabled(&self, id: u64, disabled: bool) -> Result<(), AdminServiceError> {
+    pub async fn set_disabled(&self, id: u64, disabled: bool) -> Result<(), AdminServiceError> {
         // 先获取当前凭据 ID，用于判断是否需要切换
         let snapshot = self.token_manager.snapshot();
         let current_id = snapshot.current_id;
 
         self.token_manager
             .set_disabled(id, disabled)
+            .await
             .map_err(|e| self.classify_error(e, id))?;
 
         // 只有禁用的是当前凭据时才尝试切换到下一个
@@ -71,16 +72,18 @@ impl AdminService {
     }
 
     /// 设置凭据优先级
-    pub fn set_priority(&self, id: u64, priority: u32) -> Result<(), AdminServiceError> {
+    pub async fn set_priority(&self, id: u64, priority: u32) -> Result<(), AdminServiceError> {
         self.token_manager
             .set_priority(id, priority)
+            .await
             .map_err(|e| self.classify_error(e, id))
     }
 
     /// 重置失败计数并重新启用
-    pub fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
+    pub async fn reset_and_enable(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
             .reset_and_enable(id)
+            .await
             .map_err(|e| self.classify_error(e, id))
     }
 
@@ -147,9 +150,10 @@ impl AdminService {
     }
 
     /// 删除凭据
-    pub fn delete_credential(&self, id: u64) -> Result<(), AdminServiceError> {
+    pub async fn delete_credential(&self, id: u64) -> Result<(), AdminServiceError> {
         self.token_manager
             .delete_credential(id)
+            .await
             .map_err(|e| self.classify_delete_error(e, id))
     }
 

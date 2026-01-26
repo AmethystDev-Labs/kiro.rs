@@ -6,12 +6,14 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
+use crate::model::config::Config;
 
 /// Kiro OAuth 凭证
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct KiroCredentials {
     /// 凭据唯一标识符（自增 ID）
+    #[serde(default, deserialize_with = "deserialize_id_opt")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<u64>,
 
@@ -44,7 +46,7 @@ pub struct KiroCredentials {
     pub client_secret: Option<String>,
 
     /// 凭据优先级（数字越小优先级越高，默认为 0）
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_priority")]
     #[serde(skip_serializing_if = "is_zero")]
     pub priority: u32,
 
@@ -62,6 +64,119 @@ pub struct KiroCredentials {
 /// 判断是否为零（用于跳过序列化）
 fn is_zero(value: &u32) -> bool {
     *value == 0
+}
+
+fn deserialize_priority<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    use std::fmt;
+
+    struct PriorityVisitor;
+
+    impl<'de> Visitor<'de> for PriorityVisitor {
+        type Value = u32;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a priority number or a string containing a priority number or environment variable")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value <= u32::MAX as u64 {
+                Ok(value as u32)
+            } else {
+                Err(E::custom(format!("priority out of range: {}", value)))
+            }
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value >= 0 && value <= u32::MAX as i64 {
+                Ok(value as u32)
+            } else {
+                Err(E::custom(format!("priority out of range: {}", value)))
+            }
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let resolved = Config::resolve_env(value);
+            resolved.parse::<u32>().map_err(|e| E::custom(format!("invalid priority: {}. Error: {}", resolved, e)))
+        }
+    }
+
+    deserializer.deserialize_any(PriorityVisitor)
+}
+
+fn deserialize_id_opt<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    use std::fmt;
+
+    struct IdVisitor;
+
+    impl<'de> Visitor<'de> for IdVisitor {
+        type Value = Option<u64>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("an optional id number or a string containing an id number or environment variable")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            deserializer.deserialize_any(self)
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(Some(value))
+        }
+
+        fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value >= 0 {
+                Ok(Some(value as u64))
+            } else {
+                Err(E::custom(format!("id cannot be negative: {}", value)))
+            }
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            if value.is_empty() {
+                return Ok(None);
+            }
+            let resolved = Config::resolve_env(value);
+            resolved.parse::<u64>().map(Some).map_err(|e| E::custom(format!("invalid id: {}. Error: {}", resolved, e)))
+        }
+    }
+
+    deserializer.deserialize_option(IdVisitor)
 }
 
 fn canonicalize_auth_method_value(value: &str) -> &str {
@@ -107,8 +222,21 @@ impl CredentialsConfig {
             return Ok(CredentialsConfig::Multiple(vec![]));
         }
 
-        let config = serde_json::from_str(&content)?;
+        let mut config: CredentialsConfig = serde_json::from_str(&content)?;
+        config.resolve_all_env();
         Ok(config)
+    }
+
+    /// 对所有凭据应用环境变量解析
+    pub fn resolve_all_env(&mut self) {
+        match self {
+            CredentialsConfig::Single(cred) => cred.resolve_all_env(),
+            CredentialsConfig::Multiple(creds) => {
+                for cred in creds {
+                    cred.resolve_all_env();
+                }
+            }
+        }
     }
 
     /// 转换为按优先级排序的凭据列表
@@ -168,8 +296,40 @@ impl KiroCredentials {
         if content.is_empty() {
             anyhow::bail!("凭证文件为空: {:?}", path.as_ref());
         }
-        let credentials = Self::from_json(&content)?;
+        let mut credentials = Self::from_json(&content)?;
+        credentials.resolve_all_env();
         Ok(credentials)
+    }
+
+    /// 对所有字段应用环境变量解析
+    pub fn resolve_all_env(&mut self) {
+        if let Some(val) = self.access_token.as_ref() {
+            self.access_token = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.refresh_token.as_ref() {
+            self.refresh_token = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.profile_arn.as_ref() {
+            self.profile_arn = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.expires_at.as_ref() {
+            self.expires_at = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.auth_method.as_ref() {
+            self.auth_method = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.client_id.as_ref() {
+            self.client_id = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.client_secret.as_ref() {
+            self.client_secret = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.region.as_ref() {
+            self.region = Some(Config::resolve_env(val));
+        }
+        if let Some(val) = self.machine_id.as_ref() {
+            self.machine_id = Some(Config::resolve_env(val));
+        }
     }
 
     /// 序列化为格式化的 JSON 字符串
@@ -221,6 +381,26 @@ mod tests {
 
         let creds = KiroCredentials::from_json(json).unwrap();
         assert_eq!(creds.access_token, Some("test_token".to_string()));
+    }
+
+    #[test]
+    fn test_creds_resolve_all_env() {
+        use std::env;
+        unsafe {
+            env::set_var("KIRO_ACCESS_TOKEN", "resolved_token");
+            env::set_var("KIRO_PRIORITY", "10");
+        }
+
+        let json = r#"{
+            "accessToken": "${KIRO_ACCESS_TOKEN}",
+            "priority": "${KIRO_PRIORITY}"
+        }"#;
+
+        let mut creds: KiroCredentials = serde_json::from_str(json).unwrap();
+        creds.resolve_all_env();
+
+        assert_eq!(creds.access_token, Some("resolved_token".to_string()));
+        assert_eq!(creds.priority, 10);
     }
 
     #[test]

@@ -575,40 +575,41 @@ mod tests {
     use crate::kiro::token_manager::CallContext;
     use crate::model::config::Config;
 
-    fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
-        let tm = MultiTokenManager::new(config, vec![credentials], None, None, false).unwrap();
+    async fn create_test_provider(config: Config, credentials: KiroCredentials) -> KiroProvider {
+        let tm = MultiTokenManager::new(config, vec![credentials], None, None, false, None)
+            .await
+            .unwrap();
         KiroProvider::new(Arc::new(tm))
     }
 
-    #[test]
-    fn test_base_url() {
+    #[tokio::test]
+    async fn test_base_url() {
         let config = Config::default();
         let credentials = KiroCredentials::default();
-        let provider = create_test_provider(config, credentials);
+        let provider = create_test_provider(config, credentials).await;
         assert!(provider.base_url().contains("amazonaws.com"));
         assert!(provider.base_url().contains("generateAssistantResponse"));
     }
 
-    #[test]
-    fn test_base_domain() {
+    #[tokio::test]
+    async fn test_base_domain() {
         let mut config = Config::default();
         config.region = "us-east-1".to_string();
         let credentials = KiroCredentials::default();
-        let provider = create_test_provider(config, credentials);
+        let provider = create_test_provider(config, credentials).await;
         assert_eq!(provider.base_domain(), "q.us-east-1.amazonaws.com");
     }
 
-    #[test]
-    fn test_build_headers() {
+    #[tokio::test]
+    async fn test_kiro_provider_build_headers() {
         let mut config = Config::default();
-        config.region = "us-east-1".to_string();
-        config.kiro_version = "0.8.0".to_string();
+        config.kiro_version = "1.0.0".to_string();
 
         let mut credentials = KiroCredentials::default();
         credentials.profile_arn = Some("arn:aws:sso::123456789:profile/test".to_string());
         credentials.refresh_token = Some("a".repeat(150));
 
-        let provider = create_test_provider(config, credentials.clone());
+        let provider = create_test_provider(config, credentials.clone()).await;
         let ctx = CallContext {
             id: 1,
             credentials,

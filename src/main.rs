@@ -14,7 +14,8 @@ use kiro::model::credentials::{CredentialsConfig, KiroCredentials};
 use kiro::provider::KiroProvider;
 use kiro::token_manager::MultiTokenManager;
 use model::arg::Args;
-use model::config::Config;
+use model::config::{Config, CredentialsBackend};
+use sqlx::postgres::PgPoolOptions;
 
 #[tokio::main]
 async fn main() {
@@ -77,6 +78,26 @@ async fn main() {
         tracing::info!("已配置 HTTP 代理: {}", config.proxy_url.as_ref().unwrap());
     }
 
+    // 初始化数据库连接池（如果需要）
+    let db_pool = if config.credentials_backend == CredentialsBackend::Postgres {
+        let db_url = config.db_url.clone().unwrap_or_else(|| {
+            tracing::error!("credentialsBackend=postgres 但未设置 dbUrl");
+            std::process::exit(1);
+        });
+        tracing::info!("正在连接 PostgreSQL 数据库...");
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&db_url)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::error!("连接数据库失败: {}", e);
+                std::process::exit(1);
+            });
+        Some(pool)
+    } else {
+        None
+    };
+
     // 创建 MultiTokenManager 和 KiroProvider
     let token_manager = MultiTokenManager::new(
         config.clone(),
@@ -84,7 +105,9 @@ async fn main() {
         proxy_config.clone(),
         Some(credentials_path.into()),
         is_multiple_format,
+        db_pool,
     )
+    .await
     .unwrap_or_else(|e| {
         tracing::error!("创建 Token 管理器失败: {}", e);
         std::process::exit(1);

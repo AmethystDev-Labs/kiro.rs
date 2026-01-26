@@ -25,7 +25,7 @@ pub async fn set_credential_disabled(
     Path(id): Path<u64>,
     Json(payload): Json<SetDisabledRequest>,
 ) -> impl IntoResponse {
-    match state.service.set_disabled(id, payload.disabled) {
+    match state.service.set_disabled(id, payload.disabled).await {
         Ok(_) => {
             let action = if payload.disabled { "禁用" } else { "启用" };
             Json(SuccessResponse::new(format!("凭据 #{} 已{}", id, action))).into_response()
@@ -41,7 +41,7 @@ pub async fn set_credential_priority(
     Path(id): Path<u64>,
     Json(payload): Json<SetPriorityRequest>,
 ) -> impl IntoResponse {
-    match state.service.set_priority(id, payload.priority) {
+    match state.service.set_priority(id, payload.priority).await {
         Ok(_) => Json(SuccessResponse::new(format!(
             "凭据 #{} 优先级已设置为 {}",
             id, payload.priority
@@ -57,7 +57,7 @@ pub async fn reset_failure_count(
     State(state): State<AdminState>,
     Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    match state.service.reset_and_enable(id) {
+    match state.service.reset_and_enable(id).await {
         Ok(_) => Json(SuccessResponse::new(format!(
             "凭据 #{} 失败计数已重置并重新启用",
             id
@@ -97,7 +97,7 @@ pub async fn delete_credential(
     State(state): State<AdminState>,
     Path(id): Path<u64>,
 ) -> impl IntoResponse {
-    match state.service.delete_credential(id) {
+    match state.service.delete_credential(id).await {
         Ok(_) => Json(SuccessResponse::new(format!("凭据 #{} 已删除", id))).into_response(),
         Err(e) => (e.status_code(), Json(e.into_response())).into_response(),
     }
